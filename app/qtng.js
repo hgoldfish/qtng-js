@@ -291,7 +291,7 @@ class CoroutineGroup {
     }
 
     spawn(func, ...args) {
-        this.spawnWithName(this.randomName(), func, ...args);
+        return this.spawnWithName(this.randomName(), func, ...args);
     }
 
     spawnWithName(name, func, ...args) {
@@ -303,6 +303,7 @@ class CoroutineGroup {
                 this.coroutines.delete(name);
             }
         });
+        return coroutine;
     }
 
     randomName(length) {
@@ -744,7 +745,7 @@ class BrowserSession extends BaseSession {
                 await c.pause();
             } catch (e) {
                 if (!done) {
-                    task.cancel();
+                    xhr.abort();
                 }
                 throw e;
             } finally {

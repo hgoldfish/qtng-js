@@ -3,25 +3,32 @@ const qtng = require("./qtng.js");
 let operations = new qtng.CoroutineGroup();
 let event = new qtng.Event();
 
+function output(text) {
+    document.querySelector("#text-output").innerHTML += text + "\n";
+}
+
 operations.spawn(async () => {
-    let output = document.querySelector("#text-output");
     let lines = [];
-    for (let i = 0; i < 0; ++i) {
+    for (let i = 0; i < 5; ++i) {
         await qtng.msleep(1000);
-        lines.push("" + i);
-        output.innerHTML = lines.join("\n");
+        output(i);
     }
     event.set("ok");
 });
 
-operations.spawn(async () => {
-    let output = document.querySelector("#text-output");
+let t = operations.spawn(async () => {
     let msg = await event.wait();
-    output.innerHTML = msg;
+    output(msg);
     let r = await qtng.http.get("/test-data.html");
     if (r.isOk) {
-        output.innerHTML = r.data;
+        output(r.data);
     } else {
         console.debug(r.error);
     }
 });
+
+(async () => {
+    let msg = await event.wait();
+    //t.kill();
+    output("msg from implicit coroutinne: " + msg);
+})();
