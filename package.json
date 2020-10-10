@@ -1,0 +1,32 @@
+{
+  "name": "qtng",
+  "version": "1.0.0",
+  "description": "Coroutine Toolkit For Humans",
+  "main": "qtng.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack",
+    "server": "webpack-dev-server --open",
+    "build": "NODE_ENV=production && webpack --config ./webpack.production.config.js --progress"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hgoldfish/qtng-js.git"
+  },
+  "keywords": [
+    "coroutine",
+    "http",
+    "request"
+  ],
+  "author": "Qize Huang <hgoldfish@gmail.com>",
+  "license": "LGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/hgoldfish/qtng-js/issues"
+  },
+  "homepage": "https://github.com/hgoldfish/qtng-js#readme",
+  "devDependencies": {
+    "webpack": "^4.44.2",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
