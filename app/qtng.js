@@ -46,9 +46,8 @@ class YieldHelper {
 let nextId = 1;
 
 class Coroutine {
-    constructor(func, args) {
+    constructor(func) {
         this.func = func;
-        this.args = args;
         this.finished = new Promise((resolve, _) => {
             this.finished_resolve = resolve;
         });
@@ -71,11 +70,12 @@ class Coroutine {
             let ok = true;
             let result = undefined;
             try {
-                result = await this.func(...this.args);
+                result = await this.func();
             } catch (e) {
                 if (e !== CoroutineExitException) {
                     console.error("got unhandled coroutine exception:", e);
                     ok = false;
+                    result = e;
                 }
             }
             this.started = 0;
@@ -135,12 +135,40 @@ class Coroutine {
         }
     }
 
-    static spawn(func, ...args) {
-        let coroutine = new Coroutine(func, args);
+    static spawn(func) {
+        let coroutine = new Coroutine(func);
         coroutine.start();
         return coroutine;
     }
 
+    static async all(coroutines) {
+        let results = [];
+        for (let coroutine of coroutines) {
+            results.push(await coroutine.join());
+        }
+        return results;
+    }
+    
+    static async any(coroutines) {
+        let done = false;
+        return await new Promise((resolve, reject) => {
+            for (let coroutine of coroutines) {
+                coroutine.finished.then(t => {
+                    if (done) {
+                        return;
+                    }
+                    done = true;
+                    let [ok, result] = t;
+                    if (ok) {
+                        resolve(result);
+                    } else {
+                        reject(result);
+                    }
+                });
+            }
+        });
+    }
+    
     static getCurrent() {
         if (currentCoroutine == null) {
             currentCoroutine = new Coroutine(null, null);
@@ -160,10 +188,10 @@ class Semaphore {
     constructor(initValue) {
         if (initValue <= 0) {
             console.error("Semaphore initValue: ", initValue);
+            throw CoroutineRuntimeException;
         }
         this.initValue = initValue;
-        this.counter = 0;
-        this.notified = 0;
+        this.counter = initValue;
         this.waiters = [];
     }
 
@@ -193,18 +221,10 @@ class Semaphore {
         if (this.counter > this.initValue) {
             this.counter = this.initValue;
         }
-        if (!this.notified && this.waiters.length > 0) {
-            this.notified = setTimeout(() => {
-                if (this.notified == 0) {
-                    return;
-                }
-                while (this.waiters.length > 0 && this.counter > 0) {
-                    let waiter = this.waiters.unshift();
-                    --this.counter;
-                    waiter.yield();
-                }
-                this.notified = 0;
-            }, 0);
+        while (this.waiters.length > 0 && this.counter > 0) {
+            let waiter = this.waiters.shift();
+            --this.counter;
+            waiter.yield();
         }
     }
 
@@ -226,7 +246,7 @@ class Lock extends Semaphore{
 class Event {
     constructor() {
         this.flag = false;
-        this.value = null;
+        this.value = undefined;
         this.waiters = [];
     }
 
@@ -290,12 +310,22 @@ class CoroutineGroup {
         this.coroutines = new Map();
     }
 
-    spawn(func, ...args) {
-        return this.spawnWithName(this.randomName(), func, ...args);
+    spawn(...funcs) {
+        if (funcs.length == 0) {
+            return undefined;
+        } else if (funcs.length == 1) {
+            return this.spawnWithName(this.randomName(), funcs[0]);
+        } else {
+            let coroutines = [];
+            for (let func of funcs) {
+                coroutines.push(this.spawnWithName(this.randomName(), func));
+            }
+            return coroutines;
+        }
     }
 
-    spawnWithName(name, func, ...args) {
-        let coroutine = Coroutine.spawn(func, args);
+    spawnWithName(name, func) {
+        let coroutine = Coroutine.spawn(func);
         coroutine.name = name;
         this.coroutines.set(name, coroutine);
         coroutine.finished.finally(() => {
@@ -391,7 +421,7 @@ function fiber(target, name, descriptor) {
         if (!target.operations) {
             target.operations = new CoroutineGroup();
         }
-        target.operations.spawnWithName(name, wrapped.bind(target), ...args);
+        target.operations.spawnWithName(name, wrapped.bind(target, ...args));
     }
     return wrapper;
 }
@@ -602,13 +632,14 @@ class WeixinSession extends BaseSession {
         response.url = request.url;
 
         let done = false;
-        d["success"] = (resp) => {
+        d["success"] = (wxresp) => {
             done = true;
-            response.statusCode = resp.statusCode;
-            for (const headerName of Object.keys(resp.header)) {
-                response.headers[headerName] = resp.header[headerName];
+            response.statusCode = wxresp.statusCode;
+            response.statusText = "";
+            for (const headerName of Object.keys(wxresp.header)) {
+                response.headers[headerName] = wxresp.header[headerName];
             }
-            response.data = resp.data;
+            response.data = wxresp.data;
             if (c != null) {
                 c.yield();
             }
@@ -787,6 +818,7 @@ module.exports = {
     CoroutineRuntimeException,
     Coroutine,
     Event,
+    Semaphore,
     Lock,
     msleep,
     sleep,
